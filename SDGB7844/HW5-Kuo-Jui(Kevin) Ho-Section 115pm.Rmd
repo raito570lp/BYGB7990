@@ -1,0 +1,289 @@
+---
+title: "HW5 Kuo-Jui(Kevin) Ho Section 115pm"
+author: "Kevin Ho"
+date: "12/5/2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(tidyverse)
+```
+
+## Question 1
+```{r}
+data.x <- read_delim("asset_data.txt", col_names = T, delim = ",")
+data.x <- data.x %>% drop_na(fed.rate)
+head(data.x)
+tail(data.x)
+# The start date is 2003-01-08, and the end date is 2014-10-29
+
+theme.info <- theme(plot.title = element_text(size=12, hjust=0.5),
+                    axis.title = element_text(size=10),
+                    axis.text=element_text(size=10)) 
+
+data.x %>% ggplot(aes(x = date, y = fed.rate)) + 
+  geom_line(size=1) +
+  labs(x = "Date", y = "Fed Rate in %")+
+  theme.info
+# During 2005-2008, the fed rate rised extremely high, which means the economy was going really at that time. However, when it hit the recent financial crisis in 2008, the fed rate has to drop so the government can bring in more funds to help the market. After that, the fed rate was keep at a pretty low point to ensure the economy goes back to normal. 
+```
+
+## Question 2
+```{r}
+require(lubridate)
+training.data <- filter(data.x, as.logical(year(data.x$date) < 2014) == T)
+testing.data <- filter(data.x, as.logical(year(data.x$date) < 2014) == F)
+
+#Training data will contain 570 observations and test data will contain 43 observations
+```
+
+## Question 3
+```{r}
+data.x <- data.x %>% mutate(fed.rate = data.x$fed.rate/100)
+training.data <- training.data %>% arrange(date) %>% 
+                  mutate(spy.return = (close.spy - lag(close.spy))/lag(close.spy))
+training.data <- training.data %>% arrange(date) %>% 
+                  mutate(tlt.return = (close.tlt - lag(close.tlt))/lag(close.tlt))                         
+training.data %>% ggplot() + 
+  geom_line(aes(x = date, y = spy.return), color = "firebrick") +
+  geom_line(aes(x = date, y = tlt.return), color = "dodgerblue") +
+  geom_hline(yintercept = 0, linetype = "dotted", size = 2)+
+  labs(x = "Date", y = "Total Returns")+
+  theme.info   
+
+# S&P 500 return is more volatile, yet bond return tends to be more stablized. We can see that the total returns for S&P 500 sometimes go over -0.1 and goes back to 0.1 in a week. Bonds ETF, on the contrary, tends to stay in the -0.1 to 0.1 range. 
+```
+
+## Question 4
+```{r}
+training.data %>% ggplot(aes(sample=spy.return)) +
+                  stat_qq() +
+                  stat_qq_line() +
+                  ggtitle("S&P 500 Total Return Plot") +
+                  theme.info
+
+training.data %>% ggplot(aes(sample=tlt.return)) +
+                  stat_qq() +
+                  stat_qq_line() +
+                  ggtitle("Long Term Treasury Bonds Total Return Plot") +
+                  theme.info
+
+# Both plots show that it is normally distributed with some outliers. So we can assume that the Sharpe ratio is correct.
+```
+
+## Question 5
+```{r}
+cor(training.data$spy.return, training.data$tlt.return, method = "pearson", use = "complete.obs")
+training.data %>% ggplot(aes(x = spy.return, y = tlt.return)) +
+                  geom_point()+
+                  theme.info
+
+rolling.window <- vector("numeric")
+for (i in 1:(nrow(training.data))){
+  rolling.window[i+23] <- cor(training.data$spy.return[i:(i+23)],
+                        training.data$tlt.return[i:(i+23)])
+}
+
+training.data <- training.data %>% mutate("Rolling Window" = rolling.window[1:570])  
+training.data %>% ggplot(aes(x=date, y=rolling.window[1:570]))+
+                  geom_line(color = "firebrick")+
+                  geom_hline(yintercept = 0, linetype = "dotted", 
+                             color = "gray", size = 2)+
+                  theme.info
+
+# Rolling window appears to be the better way to describe the relationship between these two ETFs, since in different time frame there will be different correlation. You will have a better sense on the asset return in multiple time frame, and possibly interpret what happens during the time. 
+```
+
+## Question 6
+```{r}
+# Step 1
+training.data <- training.data %>% mutate(fed.rate = training.data$fed.rate/100)
+
+excess.spy <- vector("numeric")
+excess.tlt <- vector("numeric")
+for (i in 1:nrow(training.data)){
+  excess.spy[i] <- training.data$spy.return[i]-(training.data$fed.rate[i-1]/52)
+  excess.tlt[i] <- training.data$tlt.return[i]-(training.data$fed.rate[i-1]/52)
+}
+
+# Step 2
+index.spy <- vector("numeric")
+index.tlt <- vector("numeric")
+for (i in 1:nrow(training.data)){
+  if (i == 1){
+    index.spy[i] <- 100
+    index.tlt[i] <- 100
+  }else{
+    index.spy[i] <- index.spy[i-1] * (1+excess.spy[i])
+    index.tlt[i] <- index.tlt[i-1] * (1+excess.tlt[i])
+  }
+}
+
+# Step 3
+years.of.data <- (nrow(training.data)-1)/52
+
+# Step 4
+CAGR.spy <- (index.spy[nrow(training.data)]/index.spy[1])^(1/years.of.data)-1
+CAGR.tlt <- (index.tlt[nrow(training.data)]/index.tlt[1])^(1/years.of.data)-1
+
+# Step 5
+volatility.spy <- sqrt(52)*sd(excess.spy, na.rm = T)
+volatility.tlt <- sqrt(52)*sd(excess.tlt, na.rm = T)
+
+# Step 6
+SR.spy <- CAGR.spy/volatility.spy
+SR.tlt <- CAGR.tlt/volatility.tlt
+SR.spy
+SR.tlt
+# We can see that S&P 500 would be a better investment since the return of sharpe ratio is 0.28, yet the return of sharpe ratio from treasurey bond is -0.01. The higher sharpe ratio means the risk you have to take is lesser, and more return as well.
+```
+
+## Question 7
+```{r}
+f <- function(x = seq(0, 1, length = 200), 
+              spy = training.data$spy.return, 
+              tlt = training.data$tlt.return, 
+              fed.rate = training.data$fed.rate){
+  
+  # Returns for portfolio
+  return.portfolio <- tibble()
+  for(i in 1:length(x)){
+    for(j in 1:length(fed.rate)){
+      return.portfolio[j,i] <- x[i]*spy[j]+(1-x)[i]*tlt[j]
+    }
+  }
+  
+  # Excess return
+  excess <- tibble()
+  for(i in 1:length(x)){
+    for(j in 1:length(fed.rate)){
+      if(j > 1){
+         excess[j,i] <- return.portfolio[j,i] - ((fed.rate)[j-1]/52)
+      }
+    }
+  }
+  
+  # Excess index return
+  excess.index <- tibble()
+  for(i in 1:length(x)){
+    for(j in 1:length(fed.rate)){
+      if (j==1){
+        excess.index[j,i] <- 100
+      }else{
+        excess.index[j,i] <- excess.index[j-1,i]*(1+excess[j,i])
+      }
+    }
+  }
+  
+  # Compounded annual growth rate
+  CAGR <- vector("numeric")
+  for (i in 1:length(x)){
+    CAGR[i] <- (excess.index[length(fed.rate),i]/excess.index[1,i])^(1/(years.of.data))-1
+  }
+  
+  # Volatility
+  v <- vector("numeric")
+  for (i in 1:length(x)){
+    v[i] <- sqrt(52)*as.numeric(sd(unlist(excess[,i]), na.rm = T))
+  }
+  
+  # Sharpe Ratio
+  SR <- vector("numeric")
+  for (i in 1:length(x)){
+    SR[i] <- as.numeric(unlist(CAGR[i]))/v[i]
+  }
+  
+  return(SR)
+}
+
+ggplot()+
+  stat_function(aes(x = c(0,1)), fun = f)+
+  labs(x = "Weight", y = "Sharpe Ratio")+
+  ggtitle("Different Weight v.s. Sharpe Ratio")+
+  theme.info
+
+```
+
+## Question 8
+```{r}
+optimized.portfolio <- optimize(f, c(0,1), maximum = T)
+optimized.portfolio
+# According to our analysis by using optimize function, the highest sharpe ratio lands on 0.36 when we invest 59.6% in S&P 500, and 40.4% in treasurey bond. 
+```
+
+## Question 9
+```{r}
+testing.data <- testing.data %>% mutate(fed.rate = testing.data$fed.rate/100)
+
+testing.data <- testing.data %>% arrange(date) %>% 
+                  mutate(spy.return = (close.spy - lag(close.spy))/lag(close.spy))
+testing.data <- testing.data %>% arrange(date) %>% 
+                  mutate(tlt.return = (close.tlt - lag(close.tlt))/lag(close.tlt))
+
+# Get excess return for test data
+test.excess.spy <- vector("numeric")
+test.excess.tlt <- vector("numeric")
+for (i in 1:nrow(testing.data)){
+  test.excess.spy[i] <- testing.data$spy.return[i]-(testing.data$fed.rate[i-1]/52)
+  test.excess.tlt[i] <- testing.data$tlt.return[i]-(testing.data$fed.rate[i-1]/52)
+}
+
+# Get excess return index for test data
+test.index.spy <- vector("numeric")
+test.index.tlt <- vector("numeric")
+for (i in 1:nrow(testing.data)){
+  if (i == 1){
+    test.index.spy[i] <- 100
+    test.index.tlt[i] <- 100
+  }else{
+    test.index.spy[i] <- test.index.spy[i-1] * (1 + test.excess.spy[i])
+    test.index.tlt[i] <- test.index.tlt[i-1] * (1 + test.excess.tlt[i])
+  }
+}
+
+# Optimized Portfolio excess return index
+return.portfolio <- optimized.portfolio$maximum*(testing.data$spy.return) + (1-optimized.portfolio$maximum)*(testing.data$tlt.return)
+
+test.excess.portfolio <- vector("numeric")
+for (i in 1:nrow(testing.data)){
+  test.excess.portfolio[i] <- return.portfolio[i]-
+    (testing.data$fed.rate[i-1]/52)
+}
+
+test.excess.index.portfolio <- vector("numeric")
+for (i in 1:nrow(testing.data)){
+  if (i == 1){
+    test.excess.index.portfolio[i] <- 100
+  }else{
+    test.excess.index.portfolio[i] <- 
+      test.excess.index.portfolio[i-1] * (1 + test.excess.portfolio[i])
+  }
+}
+
+testing.data <- testing.data %>% arrange(date) %>% 
+  mutate(test.index.spy = test.index.spy, 
+         test.index.tlt = test.index.tlt, test.excess.index.portfolio = 
+           test.excess.index.portfolio)
+
+testing.data %>% ggplot() + 
+  geom_line(aes(x = date, y = test.index.spy), color = "firebrick") +
+  geom_line(aes(x = date, y = test.index.tlt), color = "dodgerblue") +
+  geom_line(aes(x = date, y = test.excess.index.portfolio), 
+                color = "darkorchid4") +
+  geom_hline(yintercept = 100, linetype = "dotted", size = 1.5) +
+  labs(x = "Date", y = "Excess Return Index") +
+  theme.info
+
+# In the testing data time series plot, the treasurey bond is returning with higher excess return index, and it is also stably rising. The S&P 500, on the contrary, is returning with a lower index number.
+```
+
+## Question 10
+```{r}
+test.index.spy[43]-test.index.spy[1]
+test.index.tlt[43]-test.index.tlt[1]
+test.excess.index.portfolio[43]-test.excess.index.portfolio[1]
+
+# If we invest 100 in each set, we will get 7.87 back from equity, 16.37 back from bond, and 11.63 from our mixed portfolio. It would better if we only invest in treasurey bond since it gives us the highest excess return index. Our mixed portfolio performed second between bond and S&P 500. S&P 500 performed the worst in 2014. 
+```
+
