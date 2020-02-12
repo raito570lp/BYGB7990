@@ -32,3 +32,22 @@ form. Add both sets of returns to your training set
 tibble. These returns are also called total returns. Construct a single time series plot
 with the returns for both assets plotted.
 
+4. Construct two normal quantile plot
+
+5. Compute the correlation between the S&P500 and long term treasury bond returns in
+the training set and interpret it
+
+6. Compute the Sharpe Ratio
+
+7. Write a function which takes the following inputs: (a) a vector of portfolio weights (call
+this argument x; weights are between 0 and 1), (b) a vector of returns for asset 1, (c) a
+vector of returns for asset 2, and (d) a vector of the corresponding weekly federal funds
+interest rates.
+
+8. Using the training set, use optimize() to determine the optimum weight for each asset using
+the function you wrote in Question 7
+
+9. Using all the steps we did before and evaluate our portfolio by testing the test set data.
+
+10. How much would you have at the end of the test set period for each asset in addition to
+the risk-free interest rate?
